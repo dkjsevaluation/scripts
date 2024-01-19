@@ -1,0 +1,115 @@
+---
+title: "Stiftungsbericht"
+author: "Alex"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+library(dplyr)
+library(psych)
+library(ggplot2)
+library(tidyr)
+library(patchwork)
+library(stringr)
+library(pwr)
+library(dkjslama)
+library(MKpower)
+```
+
+```{r Lamapoll API, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+###create empty list for fbdata
+fblist <- list()
+
+### get vector with fbnames
+fbnames <- c("Evaluation_JbK_vorher", "Evaluation_Schulerfolgdigital_retro")
+
+### get vector with varnames
+varnames <- c("WISS_meth", "WISS", "NETZ", "XYZ.")
+
+## get Lamapoll data for every fbname and put it into list fbdata with fbname as name of df
+for (i in fbnames) {
+  df <- as.data.frame(get.lamapoll.data(i, "we@dkjs.de", "wGl5v4fz"))
+  df <- df %>%
+    mutate(across(where(is.integer), as.numeric))
+  fblist[[i]] <- df
+}
+
+### use only numeric variables
+fblist_num <- list()
+for (j in 1:length(fblist)) {
+  df_num <- fblist[[j]] %>% select(where(is.numeric))
+  fblist_num[[length(fblist_num) + 1]] <- df_num
+}
+names(fblist_num) <- names(fblist)
+
+### delete suffix .xxx in all variable names in all dfs
+fblist_num <- lapply(fblist_num, function(df) {
+  names(df) <- stringr::str_remove(names(df), "\\..*")
+  df
+})
+
+```
+
+```{r reduce and pick, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+####    if _vor und _nac are present, calculate difference variable WISS_diff = _nac - _vor
+####    if _vor und _nac are present, calculate Wilcoxon-Tests, effect size and power. attatch results to dfs.
+####    put everything in a df outside of the logic (df_zus)
+
+df_zus <- data.frame(FB = character(),
+                     N_Skala = numeric(),
+                     M_WISS_vor = numeric(),
+                     SD_WISS_vor = numeric(),
+                     M_WISS_nac = numeric(),
+                     SD_WISS_nac = numeric(),
+                     M_WISS_dff = numeric(),
+                     SD_WISS_dff = numeric(),
+                     p_WISS_test = numeric(),
+                     d_WISS_dff = numeric(),
+                     pwr_WISS_dff = numeric(),
+                     stringsAsFactors = FALSE)
+
+
+for (i in 1:length(fblist_num)) {
+  if (any(grepl("WISS_vor", colnames(fblist_num[[i]]))) & any(grepl("WISS_nac", colnames(fblist_num[[i]])))) {
+    fblist_num[[i]]$SK.WISSdiff <- fblist_num[[i]][, grepl("WISS_nac", colnames(fblist_num[[i]]))] - fblist_num[[i]][, grepl("WISS_vor", colnames(fblist_num[[i]]))]
+    wsr_test <- coin::wilcoxsign_test(fblist_num[[i]][, grepl("WISS_vor", colnames(fblist_num[[i]]))] ~ fblist_num[[i]][, grepl("WISS_nac", colnames(fblist_num[[i]]))], data = fblist_num[[i]], zero.method = "Wilcoxon")
+    fblist_num[[i]]$SK.WISSdiff_p <- coin::pvalue(wsr_test)
+
+    wsr_z <- wsr_test@statistic@teststatistic
+    wsr_r <- abs(wsr_z/sqrt(nrow(wsr_test@statistic@x)))
+    fblist_num[[i]]$SK.WISSdiff_d <- sqrt(-4 * wsr_r^2 / (wsr_r^2 - 1))
+
+    rxy <- function(n) rnorm(n, mean = mean(fblist_num[[i]]$SK.WISSdiff, na.rm = T), sd(fblist_num[[i]]$SK.WISSdiff, na.rm = T))
+    pwr <- sim.ssize.wilcox.test(rx = rxy, mu = 0, type = "paired", n.min = nrow(wsr_test@statistic@x),
+                                 n.max = nrow(wsr_test@statistic@x)+2, step.size = 1, iter = 1000, BREAK = FALSE)
+    fblist_num[[i]]$SK.WISSdiff_pwr <- pwr[["emp.power"]][[1]]
+
+    df_zus <- rbind(df_zus, data.frame(FB = names(fblist_num)[i],
+                                       N_Skala = nrow(wsr_test@statistic@x),
+                                       M_WISS_vor = mean(fblist_num[[i]][, grepl("WISS_vor", colnames(fblist_num[[i]]))], na.rm = T),
+                                       SD_WISS_vor = sd(fblist_num[[i]][, grepl("WISS_vor", colnames(fblist_num[[i]]))], na.rm = T),
+                                       M_WISS_nac = mean(fblist_num[[i]][, grepl("WISS_nac", colnames(fblist_num[[i]]))], na.rm = T),
+                                       SD_WISS_nac = sd(fblist_num[[i]][, grepl("WISS_nac", colnames(fblist_num[[i]]))], na.rm = T),
+                                       M_WISS_dff = mean(fblist_num[[i]]$SK.WISSdiff, na.rm = T),
+                                       SD_WISS_dff = sd(fblist_num[[i]]$SK.WISSdiff, na.rm = T),
+                                       p_WISS_test = coin::pvalue(wsr_test),
+                                       d_WISS_dff = sqrt(-4 * wsr_r^2 / (wsr_r^2 - 1)),
+                                       pwr_WISS_dff = pwr[["emp.power"]][[1]]
+    ))
+  }
+}
+
+#### make descriptive statistics overall?
+```
+
+```{r print results, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, scipen=0) 
+## make table
+options(knitr.kable.NA = '-', knitr.table.format = 'html')
+df_zus %>% knitr::kable(digits = 2, align = 'r', caption = "Deskriptive Statistik selbsteingeschätzten Wissens und Teststatistik für Wissensveränderung")
+
+```
