@@ -1,0 +1,21 @@
+Package: dkjslama
+Type: Package
+Title: Download DKJS Lamapoll Data
+Version: 0.1.0
+Author: Alex Wedel
+Maintainer: Alex Wedel <alexander.wedel@dkjs.de>
+Description: Do not share this package openly. This package Let's you download Data from Lamapoll through their API. It's specified to the DKJS API key. Do not share the package, or the API-key will be publicly available for maluse. Upon using, the package will create a folder in the path entered in the function (second parameter: "xdir"). The data will be stored in individual excel files for each questionnaire in this folder.
+License: Privately owned by the author.
+Encoding: UTF-8
+LazyData: true
+Depends: 
+    R (>= 4.0)
+Imports:
+    openxlsx
+    httr
+    jsonlite
+    curl
+    fs
+    openssl
+RoxygenNote: 7.2.1
+

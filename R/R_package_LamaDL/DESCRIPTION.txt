@@ -1,0 +1,4 @@
+Package: LamaDL
+Type: Package
+Title: Download Data From Lamapoll
+Version: 0.1
